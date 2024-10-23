@@ -581,7 +581,7 @@ func (ts *TestScript) run() {
 
 		markTime()
 		// Flush testScript log to testing.T log.
-		ts.t.Log(ts.abbrev(ts.log.String()))
+		ts.t.Log(ts.abbrev(redactTokens(ts.log.String())))
 	}()
 	defer func() {
 		ts.deferred()
@@ -882,6 +882,22 @@ func (ts *TestScript) condition(cond string) (bool, error) {
 }
 
 // Helpers for command implementations.
+
+// redactTokens looks at the entire string looking for strings that start with
+// gho_ or ghp_, then it finds everything after _ until a whitespace separator,
+// and replaces those characters with asterisks (e.g. gho_abc123 -> gho_******).
+func redactTokens(s string) string {
+	// Regular expression to match "ghp_" or "gho_" followed by any sequence of non-whitespace characters
+	re := regexp.MustCompile(`(gh[op]_)\S+`)
+
+	// Replace matched strings with the prefix followed by asterisks
+	return re.ReplaceAllStringFunc(s, func(match string) string {
+		// Keep the "ghp_" or "gho_" prefix and replace the rest with asterisks
+		prefix := match[:4]                         // "ghp_" or "gho_"
+		length := len(match[4:])                    // Length of the remaining characters to be redacted
+		return prefix + strings.Repeat("*", length) // Replace the rest with asterisks
+	})
+}
 
 // abbrev abbreviates the actual work directory in the string s to the literal string "$WORK".
 func (ts *TestScript) abbrev(s string) string {

@@ -410,6 +410,63 @@ func TestBadDir(t *testing.T) {
 	}
 }
 
+func TestRedactTokens(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "no token",
+			input: "no token",
+			want:  "no token",
+		},
+		{
+			name:  "oauth token at start",
+			input: "gho_1234567890",
+			want:  "gho_**********",
+		},
+		{
+			name:  "oauth token at end",
+			input: "this is a gho_1234567890",
+			want:  "this is a gho_**********",
+		},
+		{
+			name:  "oauth token in middle",
+			input: "this is a gho_1234567890 and this is redacted",
+			want:  "this is a gho_********** and this is redacted",
+		},
+		{
+			name:  "oauth token at start with newline",
+			input: "gho_1234567890\n",
+			want:  "gho_**********\n",
+		},
+		{
+			name:  "oauth token with no preceding word boundary",
+			input: "foogho_1234567890",
+			want:  "foogho_**********",
+		},
+		{
+			name:  "oauth token no word boundary (extends redaction into next word)",
+			input: "gho_1234567890x",
+			want:  "gho_***********",
+		},
+		{
+			name:  "pat token",
+			input: "ghp_1234567890",
+			want:  "ghp_**********",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := redactTokens(test.input); got != test.want {
+				t.Fatalf("redactTokens(%q) == %q, want %q", test.input, got, test.want)
+			}
+		})
+	}
+}
+
 // catchAbort catches the panic raised by fakeT.FailNow.
 func catchAbort() {
 	if err := recover(); err != nil && err != errAbort {
