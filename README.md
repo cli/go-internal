@@ -1,3 +1,9 @@
+# Why is this forked?
+
+This repo is forked into the `cli` org to allow the `gh` maintainers to explore the use of `testscript` in `gh`, while providing the flexibility for us to share modifications and extensions. It is not intended to be a long-term maintained fork and you should not rely on it.
+
+## Original README
+
 This repository factors out an opinionated selection of internal packages and functionality from the Go standard
 library. Currently this consists mostly of packages and testing code from within the Go tool implementation.
 
