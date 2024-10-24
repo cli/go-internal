@@ -411,59 +411,64 @@ func TestBadDir(t *testing.T) {
 }
 
 func TestRedactTokens(t *testing.T) {
+	// https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github#githubs-token-formats
+	tokensToRedacted := map[string]string{
+		"ghp_1234567890":        "ghp_**********",
+		"github_pat_1234567890": "github_pat_**********",
+		"gho_1234567890":        "gho_**********",
+		"ghu_1234567890":        "ghu_**********",
+		"ghs_1234567890":        "ghs_**********",
+		"ghr_1234567890":        "ghr_**********",
+	}
+
 	tests := []struct {
 		name  string
 		input string
 		want  string
 	}{
 		{
-			name:  "no token",
-			input: "no token",
-			want:  "no token",
+			name:  "token at start",
+			input: "%s",
+			want:  "%s",
 		},
 		{
-			name:  "oauth token at start",
-			input: "gho_1234567890",
-			want:  "gho_**********",
+			name:  "token at end",
+			input: "this is a %s",
+			want:  "this is a %s",
 		},
 		{
-			name:  "oauth token at end",
-			input: "this is a gho_1234567890",
-			want:  "this is a gho_**********",
+			name:  "token in middle",
+			input: "this is a %s and this is redacted",
+			want:  "this is a %s and this is redacted",
 		},
 		{
-			name:  "oauth token in middle",
-			input: "this is a gho_1234567890 and this is redacted",
-			want:  "this is a gho_********** and this is redacted",
+			name:  "token at start with newline",
+			input: "%s\n",
+			want:  "%s\n",
 		},
 		{
-			name:  "oauth token at start with newline",
-			input: "gho_1234567890\n",
-			want:  "gho_**********\n",
+			name:  "token with no preceding word boundary",
+			input: "foo%s",
+			want:  "foo%s",
 		},
 		{
-			name:  "oauth token with no preceding word boundary",
-			input: "foogho_1234567890",
-			want:  "foogho_**********",
-		},
-		{
-			name:  "oauth token no word boundary (extends redaction into next word)",
-			input: "gho_1234567890x",
-			want:  "gho_***********",
-		},
-		{
-			name:  "pat token",
-			input: "ghp_1234567890",
-			want:  "ghp_**********",
+			name:  "token no word boundary (extends redaction into next word)",
+			input: "%sx",
+			want:  "%s*",
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := redactTokens(test.input); got != test.want {
-				t.Fatalf("redactTokens(%q) == %q, want %q", test.input, got, test.want)
-			}
-		})
+	for token, redacted := range tokensToRedacted {
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("%s: %s", token, test.name), func(t *testing.T) {
+				unredacted := fmt.Sprintf(test.input, token)
+				expected := fmt.Sprintf(test.want, redacted)
+
+				if got := redactTokens(unredacted); got != expected {
+					t.Fatalf("redactTokens(%q) == %q, want %q", unredacted, got, expected)
+				}
+			})
+		}
 	}
 }
 
