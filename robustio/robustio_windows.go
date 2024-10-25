@@ -8,7 +8,7 @@ import (
 	"errors"
 	"syscall"
 
-	"github.com/rogpeppe/go-internal/internal/syscall/windows"
+	"github.com/cli/go-internal/internal/syscall/windows"
 )
 
 const errFileNotFound = syscall.ERROR_FILE_NOT_FOUND

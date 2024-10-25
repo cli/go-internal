@@ -40,7 +40,7 @@ import (
 	"golang.org/x/mod/semver"
 	"golang.org/x/tools/txtar"
 
-	"github.com/rogpeppe/go-internal/par"
+	"github.com/cli/go-internal/par"
 )
 
 type Server struct {

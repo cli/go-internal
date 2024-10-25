@@ -10,7 +10,7 @@ import (
 	"io/fs"
 	"syscall"
 
-	"github.com/rogpeppe/go-internal/internal/syscall/windows"
+	"github.com/cli/go-internal/internal/syscall/windows"
 )
 
 type lockType uint32

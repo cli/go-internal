@@ -16,9 +16,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rogpeppe/go-internal/diff"
-	"github.com/rogpeppe/go-internal/testscript/internal/pty"
-	"github.com/rogpeppe/go-internal/txtar"
+	"github.com/cli/go-internal/diff"
+	"github.com/cli/go-internal/testscript/internal/pty"
+	"github.com/cli/go-internal/txtar"
 )
 
 // scriptCmds are the script command implementations.

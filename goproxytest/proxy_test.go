@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rogpeppe/go-internal/goproxytest"
-	"github.com/rogpeppe/go-internal/gotooltest"
-	"github.com/rogpeppe/go-internal/testscript"
+	"github.com/cli/go-internal/goproxytest"
+	"github.com/cli/go-internal/gotooltest"
+	"github.com/cli/go-internal/testscript"
 )
 
 func TestScripts(t *testing.T) {

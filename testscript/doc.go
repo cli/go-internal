@@ -235,7 +235,7 @@ The predefined commands are:
     Rewrite each file by replacing any leading ">" characters from
     each line. This enables a file to contain substrings that look like
     txtar file markers.
-    See also https://godoc.org/github.com/rogpeppe/go-internal/txtar#Unquote
+    See also https://godoc.org/github.com/cli/go-internal/txtar#Unquote
 
   - wait [command]
     Wait for all 'exec' and 'go' commands started in the background (with the '&'
@@ -364,6 +364,6 @@ for manual debugging of failing tests:
 	func F() { p2.F() }
 	$
 
-See also: https://pkg.go.dev/github.com/rogpeppe/go-internal/gotooltest
+See also: https://pkg.go.dev/github.com/cli/go-internal/gotooltest
 */
 package testscript

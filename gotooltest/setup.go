@@ -18,7 +18,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rogpeppe/go-internal/testscript"
+	"github.com/cli/go-internal/testscript"
 )
 
 var (

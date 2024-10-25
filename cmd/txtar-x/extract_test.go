@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/rogpeppe/go-internal/testscript"
+	"github.com/cli/go-internal/testscript"
 )
 
 func TestMain(m *testing.M) {
