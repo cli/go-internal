@@ -200,6 +200,9 @@ type Params struct {
 	// exceeded the timeout. It is equivalent to testing.T's Deadline method,
 	// and Run will set it to the method's return value if this field is zero.
 	Deadline time.Time
+
+	// Serialise, if true, will not parallelise the execution of each test script
+	Serialise bool
 }
 
 // RunDir runs the tests in the given directory. All files in dir with a ".txt"
@@ -339,7 +342,9 @@ func RunT(t T, p Params) {
 		}
 		names[name] = true
 		t.Run(name, func(t T) {
-			t.Parallel()
+			if !p.Serialise {
+				t.Parallel()
+			}
 			ts := &TestScript{
 				t:             t,
 				testTempDir:   testTempDir,
