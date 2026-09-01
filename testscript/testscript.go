@@ -24,11 +24,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
+	betterleaksconfig "github.com/betterleaks/betterleaks/config"
+	"github.com/betterleaks/betterleaks/detect"
 	betterleaksregexp "github.com/betterleaks/betterleaks/regexp"
 	"github.com/cli/go-internal/imports"
 	"github.com/cli/go-internal/internal/misspell"
@@ -932,34 +935,85 @@ func (ts *TestScript) condition(cond string) (bool, error) {
 
 // Helpers for command implementations.
 
-var githubTokenPattern = betterleaksregexp.MustCompile(
-	`(?:gh[pour]_[0-9A-Za-z]+|github_pat_[0-9A-Za-z_]+|ghs_(?:[0-9A-Za-z_-]+\.[0-9A-Za-z_-]+\.[0-9A-Za-z_-]+|[0-9A-Za-z]+))`,
+var (
+	githubTokenDetector   = newGitHubTokenDetector()
+	githubTokenDetectorMu sync.Mutex
 )
 
-// redactTokens masks GitHub tokens matched by betterleaks while preserving
-// the prefix that identifies the token type.
-func redactTokens(s string) string {
-	matches := githubTokenPattern.FindAllStringIndex(s, -1)
-	if len(matches) == 0 {
-		return s
+func newGitHubTokenDetector() *detect.Detector {
+	defaultConfig, err := betterleaksconfig.Default()
+	if err != nil {
+		panic(fmt.Sprintf("loading betterleaks configuration: %v", err))
 	}
 
-	var redacted strings.Builder
-	redacted.Grow(len(s))
-	last := 0
-	for _, matchRange := range matches {
-		redacted.WriteString(s[last:matchRange[0]])
-		match := s[matchRange[0]:matchRange[1]]
+	ruleIDs := []string{
+		"github-app-token",
+		"github-fine-grained-pat",
+		"github-oauth",
+		"github-pat",
+		"github-refresh-token",
+	}
+	rules := make(map[string]betterleaksconfig.Rule, len(ruleIDs))
+	for _, ruleID := range ruleIDs {
+		rule, ok := defaultConfig.Rules[ruleID]
+		if !ok {
+			panic("betterleaks configuration does not contain " + ruleID)
+		}
+
+		// Log redaction must not discard token-shaped values based on entropy,
+		// repository paths, or remote validation.
+		rule.Allowlists = nil
+		rule.Entropy = 0
+		rule.Filter = ""
+		rule.TokenEfficiency = false
+		rule.ValidateExpr = ""
+
+		if ruleID == "github-app-token" {
+			// Betterleaks v1.8.1 only covers the legacy 36-character ghs_
+			// format. Remove this override once the upstream fix is released:
+			// https://github.com/betterleaks/betterleaks/pull/136.
+			rule.Regex = betterleaksregexp.MustCompile(
+				`(?:ghu_[0-9A-Za-z]{36}|ghs_[0-9A-Za-z._-]{36,})`,
+			)
+		}
+		rules[ruleID] = rule
+	}
+
+	config := &betterleaksconfig.Config{
+		Rules:          rules,
+		Keywords:       make(map[string]struct{}),
+		KeywordToRules: make(map[string][]string),
+		OrderedRules:   ruleIDs,
+	}
+	for ruleID, rule := range rules {
+		for _, keyword := range rule.Keywords {
+			config.Keywords[keyword] = struct{}{}
+			config.KeywordToRules[keyword] = append(config.KeywordToRules[keyword], ruleID)
+		}
+	}
+
+	detector := detect.NewDetectorContext(context.Background(), config, detect.ValidationOptions{})
+	detector.IgnoreGitleaksAllow = true
+	return detector
+}
+
+// redactTokens masks GitHub tokens detected by betterleaks while preserving
+// the prefix that identifies the token type.
+func redactTokens(s string) string {
+	githubTokenDetectorMu.Lock()
+	findings := githubTokenDetector.DetectString(s)
+	githubTokenDetectorMu.Unlock()
+
+	for _, finding := range findings {
+		secret := strings.TrimRight(finding.Secret, ".")
 		prefixLength := 4
-		if strings.HasPrefix(match, "github_pat_") {
+		if strings.HasPrefix(secret, "github_pat_") {
 			prefixLength = 11
 		}
-		redacted.WriteString(match[:prefixLength])
-		redacted.WriteString(strings.Repeat("*", len(match)-prefixLength))
-		last = matchRange[1]
+		redacted := secret[:prefixLength] + strings.Repeat("*", len(secret)-prefixLength)
+		s = strings.ReplaceAll(s, secret, redacted)
 	}
-	redacted.WriteString(s[last:])
-	return redacted.String()
+	return s
 }
 
 // abbrev abbreviates the actual work directory in the string s to the literal string "$WORK".
