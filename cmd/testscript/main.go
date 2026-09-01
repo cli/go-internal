@@ -11,20 +11,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 
 	"github.com/cli/go-internal/goproxytest"
 	"github.com/cli/go-internal/gotooltest"
 	"github.com/cli/go-internal/testscript"
-)
-
-const (
-	// goModProxyDir is the special subdirectory in a txtar script's supporting files
-	// within which we expect to find github.com/cli/go-internal/goproxytest
-	// directories.
-	goModProxyDir = ".gomodproxy"
+	"github.com/cli/go-internal/testscript/plugin"
 )
 
 type envVarsFlag struct {
@@ -41,37 +34,28 @@ func (e *envVarsFlag) Set(v string) error {
 }
 
 func main() {
-	os.Exit(main1())
-}
-
-func main1() int {
 	switch err := mainerr(); err {
 	case nil:
-		return 0
-	case flag.ErrHelp:
-		return 2
 	default:
 		fmt.Fprintln(os.Stderr, err)
-		return 1
+		os.Exit(1)
 	}
 }
 
 func mainerr() (retErr error) {
-	fs := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
-	fs.Usage = func() {
+	flag.Usage = func() {
 		mainUsage(os.Stderr)
+		os.Exit(2)
 	}
 	var envVars envVarsFlag
-	fUpdate := fs.Bool("u", false, "update archive file if a cmp fails")
-	fWork := fs.Bool("work", false, "print temporary work directory and do not remove when done")
-	fContinue := fs.Bool("continue", false, "continue running the script if an error occurs")
-	fVerbose := fs.Bool("v", false, "run tests verbosely")
-	fs.Var(&envVars, "e", "pass through environment variable to script (can appear multiple times)")
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		return err
-	}
+	fUpdate := flag.Bool("u", false, "update archive file if a cmp fails")
+	fWork := flag.Bool("work", false, "print temporary work directory and do not remove when done")
+	fContinue := flag.Bool("continue", false, "continue running the script if an error occurs")
+	fVerbose := flag.Bool("v", false, "run tests verbosely")
+	flag.Var(&envVars, "e", "pass through environment variable to script (can appear multiple times)")
+	flag.Parse()
 
-	files := fs.Args()
+	files := flag.Args()
 	if len(files) == 0 {
 		files = []string{"-"}
 	}
@@ -115,7 +99,6 @@ func mainerr() (retErr error) {
 		files[i] = stdinTempFile
 		defer os.Remove(stdinTempFile)
 	}
-
 	p := testscript.Params{
 		Setup:           func(*testscript.Env) error { return nil },
 		Files:           files,
@@ -123,12 +106,20 @@ func mainerr() (retErr error) {
 		ContinueOnError: *fContinue,
 		TestWork:        *fWork,
 	}
+	cleanup, err := plugin.Setup(&p)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
 	if _, err := exec.LookPath("go"); err == nil {
 		if err := gotooltest.Setup(&p); err != nil {
 			return fmt.Errorf("failed to setup go tool: %v", err)
 		}
 	}
+	// When a script provides a .gomodproxy directory, serve those modules
+	// from a local proxy, overriding any GOPROXY set above.
+	goproxytest.Setup(&p)
 	origSetup := p.Setup
 	p.Setup = func(env *testscript.Env) error {
 		if err := origSetup(env); err != nil {
@@ -136,21 +127,6 @@ func mainerr() (retErr error) {
 		}
 		if *fWork {
 			env.T().Log("temporary work directory: ", env.WorkDir)
-		}
-		proxyDir := filepath.Join(env.WorkDir, goModProxyDir)
-		if info, err := os.Stat(proxyDir); err == nil && info.IsDir() {
-			srv, err := goproxytest.NewServer(proxyDir, "")
-			if err != nil {
-				return fmt.Errorf("cannot start Go proxy: %v", err)
-			}
-			env.Defer(srv.Close)
-
-			// Add GOPROXY after calling the original setup
-			// so that it overrides any GOPROXY set there.
-			env.Vars = append(env.Vars,
-				"GOPROXY="+srv.URL,
-				"GONOSUMDB=*",
-			)
 		}
 		for _, v := range envVars.vals {
 			varName, _, ok := strings.Cut(v, "=")
@@ -193,11 +169,11 @@ type runT struct {
 	failed        atomic.Bool
 }
 
-func (r *runT) Skip(is ...interface{}) {
+func (r *runT) Skip(is ...any) {
 	panic(skipRun)
 }
 
-func (r *runT) Fatal(is ...interface{}) {
+func (r *runT) Fatal(is ...any) {
 	r.Log(is...)
 	r.FailNow()
 }
@@ -206,7 +182,7 @@ func (r *runT) Parallel() {
 	// TODO run tests in parallel.
 }
 
-func (r *runT) Log(is ...interface{}) {
+func (r *runT) Log(is ...any) {
 	msg := fmt.Sprint(is...)
 	if r.stdinTempFile != "" {
 		msg = strings.ReplaceAll(msg, r.stdinTempFile, "<stdin>")

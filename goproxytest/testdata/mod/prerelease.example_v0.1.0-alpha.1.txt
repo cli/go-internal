@@ -1,0 +1,5 @@
+-- go.mod --
+module prerelease.example
+
+-- x.go --
+package x

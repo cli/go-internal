@@ -1,0 +1,19 @@
+# A command registered with SetCmd becomes available for the rest of the test.
+register greet 'hello world'
+greet
+stdout '^hello world$'
+
+# A second registration works too, and re-registering replaces the command.
+register other 'goodbye'
+other
+stdout '^goodbye$'
+
+register greet 'hi again'
+greet
+stdout '^hi again$'
+
+# Registry a random name and check that it's not exec-able
+# (we're registering commands not executables)
+env name=d8e3ec30-d063-4f54-a9e6-b40eb830252a
+register $name x
+! exec $name

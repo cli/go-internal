@@ -55,20 +55,16 @@ It is acceptable to edit the archive afterward to remove or shorten files.
 
 var tmpdir string
 
-func fatalf(format string, args ...interface{}) {
+func fatalf(format string, args ...any) {
 	os.RemoveAll(tmpdir)
 	log.Fatalf(format, args...)
 }
 
 const goCmd = "go"
 
-func main() {
-	os.Exit(main1())
-}
-
 var allFiles = flag.Bool("all", false, "include all source files")
 
-func main1() int {
+func main() {
 	flag.Usage = usage
 	flag.Parse()
 	if flag.NArg() < 2 {
@@ -154,7 +150,7 @@ func main1() int {
 			filePrefix = ".gomodproxy/" + modDir + "/"
 		} else {
 			// No comment if we're writing to stdout.
-			a.Comment = []byte(fmt.Sprintf("module %s\n\n", title))
+			a.Comment = fmt.Appendf(nil, "module %s\n\n", title)
 		}
 		a.Files = []txtar.File{
 			{Name: filePrefix + ".mod", Data: mod},
@@ -211,5 +207,5 @@ func main1() int {
 		}
 	}
 	os.RemoveAll(tmpdir)
-	return exitCode
+	os.Exit(exitCode)
 }

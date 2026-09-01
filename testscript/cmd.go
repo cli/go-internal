@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -110,6 +111,11 @@ func (ts *TestScript) cmdCmpenv(neg bool, args []string) {
 
 func (ts *TestScript) doCmdCmp(neg bool, args []string, env bool) {
 	name1, name2 := args[0], args[1]
+	if name1 == name2 {
+		// It's surprisingly easy to do e.g. `cmp foo.go foo.go` rather than
+		// `cmp foo.go foo.go.want`; protect against such obvious cases.
+		ts.Fatalf("cmp: cannot compare a file against itself")
+	}
 	text1 := ts.ReadFile(name1)
 
 	absName2 := ts.MkAbs(name2)
@@ -212,13 +218,13 @@ func (ts *TestScript) cmdEnv(neg bool, args []string) {
 		return
 	}
 	for _, env := range args {
-		i := strings.Index(env, "=")
-		if i < 0 {
+		before, after, ok := strings.Cut(env, "=")
+		if !ok {
 			// Display value instead of setting it.
 			ts.Logf("%s=%s\n", env, ts.Getenv(env))
 			continue
 		}
-		ts.Setenv(env[:i], env[i+1:])
+		ts.Setenv(before, after)
 	}
 }
 
@@ -592,7 +598,7 @@ func (ts *TestScript) waitBackgroundOne(bgName string) {
 	// Remove this process from the list of running background processes.
 	for i := range ts.background {
 		if bg == &ts.background[i] {
-			ts.background = append(ts.background[:i], ts.background[i+1:]...)
+			ts.background = slices.Delete(ts.background, i, i+1)
 			break
 		}
 	}
