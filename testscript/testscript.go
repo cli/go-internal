@@ -24,7 +24,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -935,10 +934,7 @@ func (ts *TestScript) condition(cond string) (bool, error) {
 
 // Helpers for command implementations.
 
-var (
-	githubTokenDetector   = newGitHubTokenDetector()
-	githubTokenDetectorMu sync.Mutex
-)
+var githubTokenDetector = newGitHubTokenDetector()
 
 func newGitHubTokenDetector() *detect.Detector {
 	defaultConfig, err := betterleaksconfig.Default()
@@ -999,9 +995,7 @@ func newGitHubTokenDetector() *detect.Detector {
 // redactTokens masks GitHub tokens detected by betterleaks while preserving
 // the prefix that identifies the token type.
 func redactTokens(s string) string {
-	githubTokenDetectorMu.Lock()
 	findings := githubTokenDetector.DetectString(s)
-	githubTokenDetectorMu.Unlock()
 
 	for _, finding := range findings {
 		secret := strings.TrimRight(finding.Secret, ".")

@@ -538,6 +538,20 @@ func TestTestScriptLogRedactsTokens(t *testing.T) {
 	}
 }
 
+func TestRedactTokensConcurrent(t *testing.T) {
+	token := testGitHubTokens()[0]
+	want := "ghp_" + strings.Repeat("*", len(token)-4)
+
+	for range 10 {
+		t.Run("", func(t *testing.T) {
+			t.Parallel()
+			if got := redactTokens(token); got != want {
+				t.Errorf("redactTokens(%q) == %q, want %q", token, got, want)
+			}
+		})
+	}
+}
+
 func testGitHubTokens() []string {
 	body := "0123456789abcdefghijklmnopqrstuvwxyz"
 	return []string{
