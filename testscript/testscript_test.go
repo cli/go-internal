@@ -21,12 +21,11 @@ import (
 	"time"
 )
 
-func printArgs() int {
+func printArgs() {
 	fmt.Printf("%q\n", os.Args)
-	return 0
 }
 
-func fprintArgs() int {
+func fprintArgs() {
 	s := strings.Join(os.Args[2:], " ")
 	switch os.Args[1] {
 	case "stdout":
@@ -34,15 +33,14 @@ func fprintArgs() int {
 	case "stderr":
 		fmt.Fprintln(os.Stderr, s)
 	}
-	return 0
 }
 
-func exitWithStatus() int {
+func exitWithStatus() {
 	n, _ := strconv.Atoi(os.Args[1])
-	return n
+	os.Exit(n)
 }
 
-func signalCatcher() int {
+func signalCatcher() {
 	// Note: won't work under Windows.
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -50,27 +48,25 @@ func signalCatcher() int {
 	// we will catch the signal.
 	if err := os.WriteFile("catchsignal", nil, 0o666); err != nil {
 		fmt.Println(err)
-		return 1
+		os.Exit(1)
 	}
 	<-c
 	fmt.Println("caught interrupt")
-	return 0
 }
 
-func terminalPrompt() int {
+func terminalPrompt() {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		fmt.Println(err)
-		return 1
+		os.Exit(1)
 	}
 	tty.WriteString("The magic words are: ")
 	var words string
 	fmt.Fscanln(tty, &words)
 	if words != "SQUEAMISHOSSIFRAGE" {
 		fmt.Println(words)
-		return 42
+		os.Exit(42)
 	}
-	return 0
 }
 
 func TestMain(m *testing.M) {
@@ -79,13 +75,13 @@ func TestMain(m *testing.M) {
 	}
 
 	showVerboseEnv = false
-	os.Exit(RunMain(m, map[string]func() int{
+	Main(m, map[string]func(){
 		"printargs":      printArgs,
 		"fprintargs":     fprintArgs,
 		"status":         exitWithStatus,
 		"signalcatcher":  signalCatcher,
 		"terminalprompt": terminalPrompt,
-	}))
+	})
 }
 
 func TestCRLFInput(t *testing.T) {
@@ -132,7 +128,7 @@ func TestEnv(t *testing.T) {
 		"=",
 		"key=invalid",
 	} {
-		var panicValue interface{}
+		var panicValue any
 		func() {
 			defer func() {
 				panicValue = recover()
@@ -179,8 +175,19 @@ func TestScripts(t *testing.T) {
 		Cmds: map[string]func(ts *TestScript, neg bool, args []string){
 			"setSpecialVal":    setSpecialVal,
 			"ensureSpecialVal": ensureSpecialVal,
-			"interrupt":        interrupt,
-			"waitfile":         waitFile,
+			"register": func(ts *TestScript, neg bool, args []string) {
+				// register <name> <text> dynamically defines a command
+				// that writes <text> to stdout, for the rest of the test.
+				if len(args) != 2 {
+					ts.Fatalf("usage: register <name> <text>")
+				}
+				text := args[1]
+				ts.SetCmd(args[0], func(ts *TestScript, neg bool, args []string) {
+					fmt.Fprintln(ts.Stdout(), text)
+				})
+			},
+			"interrupt": interrupt,
+			"waitfile":  waitFile,
 			"testdefer": func(ts *TestScript, neg bool, args []string) {
 				testDeferCount++
 				n := testDeferCount
@@ -293,6 +300,17 @@ func TestScripts(t *testing.T) {
 				if err := ts.Chdir(dir); err != nil {
 					ts.Fatalf("cannot chdir: %v", err)
 				}
+			},
+			"quotedstdin": func(ts *TestScript, neg bool, args []string) {
+				if neg {
+					ts.Fatalf("unsupported: ! quotedstdin")
+				}
+				if len(args) != 0 {
+					ts.Fatalf("usage: quotedstdin")
+				}
+
+				// print the contents formatted a little differently so the test cannot accidentally depend on previous stdout
+				fmt.Fprintf(ts.Stdout(), "stdin: %q\n", ts.Stdin())
 			},
 		},
 		Setup: func(env *Env) error {
@@ -532,7 +550,7 @@ func waitFile(ts *TestScript, neg bool, args []string) {
 		ts.Fatalf("usage: waitfile file")
 	}
 	path := ts.MkAbs(args[0])
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		_, err := os.Stat(path)
 		if err == nil {
 			return
@@ -553,18 +571,18 @@ type fakeT struct {
 
 var errAbort = errors.New("abort test")
 
-func (t *fakeT) Skip(args ...interface{}) {
+func (t *fakeT) Skip(args ...any) {
 	panic(errAbort)
 }
 
-func (t *fakeT) Fatal(args ...interface{}) {
+func (t *fakeT) Fatal(args ...any) {
 	t.Log(args...)
 	t.FailNow()
 }
 
 func (t *fakeT) Parallel() {}
 
-func (t *fakeT) Log(args ...interface{}) {
+func (t *fakeT) Log(args ...any) {
 	fmt.Fprint(&t.log, args...)
 }
 

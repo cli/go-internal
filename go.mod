@@ -1,6 +1,6 @@
 module github.com/cli/go-internal
 
-go 1.22.0
+go 1.25
 
 require (
 	golang.org/x/mod v0.21.0
