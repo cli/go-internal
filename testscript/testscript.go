@@ -960,12 +960,11 @@ func newGitHubTokenDetector() *detect.Detector {
 			panic("betterleaks configuration does not contain " + ruleID)
 		}
 
-		// Log redaction must not discard token-shaped values based on entropy,
-		// repository paths, or remote validation.
-		rule.Allowlists = nil
-		rule.Entropy = 0
+		// Betterleaks folds entropy and allowlist checks into Filter. Log
+		// redaction must keep every value that matches a token format.
 		rule.Filter = ""
-		rule.TokenEfficiency = false
+
+		// Detection does not need Betterleaks' remote credential validation.
 		rule.ValidateExpr = ""
 
 		if ruleID == "github-app-token" {
