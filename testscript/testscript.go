@@ -29,9 +29,6 @@ import (
 	"testing"
 	"time"
 
-	betterleaksconfig "github.com/betterleaks/betterleaks/config"
-	"github.com/betterleaks/betterleaks/detect"
-	betterleaksregexp "github.com/betterleaks/betterleaks/regexp"
 	"github.com/cli/go-internal/imports"
 	"github.com/cli/go-internal/internal/misspell"
 	"github.com/cli/go-internal/internal/os/execpath"
@@ -934,79 +931,18 @@ func (ts *TestScript) condition(cond string) (bool, error) {
 
 // Helpers for command implementations.
 
-var githubTokenDetector = newGitHubTokenDetector()
+var githubTokenRE = regexp.MustCompile(`(gh[pousr]_|github_pat_)[0-9A-Za-z._-]*[0-9A-Za-z_-]`)
 
-func newGitHubTokenDetector() *detect.Detector {
-	defaultConfig, err := betterleaksconfig.Default()
-	if err != nil {
-		panic(fmt.Sprintf("loading betterleaks configuration: %v", err))
-	}
-
-	ruleIDs := []string{
-		"github-app-token",
-		"github-fine-grained-pat",
-		"github-oauth",
-		"github-pat",
-		"github-refresh-token",
-	}
-	rules := make(map[string]betterleaksconfig.Rule, len(ruleIDs))
-	for _, ruleID := range ruleIDs {
-		rule, ok := defaultConfig.Rules[ruleID]
-		if !ok {
-			panic("betterleaks configuration does not contain " + ruleID)
-		}
-
-		// Betterleaks folds entropy and allowlist checks into Filter. Log
-		// redaction must keep every value that matches a token format.
-		rule.Filter = ""
-
-		// Detection does not need Betterleaks' remote credential validation.
-		rule.ValidateExpr = ""
-
-		if ruleID == "github-app-token" {
-			// Betterleaks v1.8.1 only covers the legacy 36-character ghs_
-			// format. Remove this override once the upstream fix is released:
-			// https://github.com/betterleaks/betterleaks/pull/136.
-			rule.Regex = betterleaksregexp.MustCompile(
-				`(?:ghu_[0-9A-Za-z]{36}|ghs_[0-9A-Za-z._-]{36,})`,
-			)
-		}
-		rules[ruleID] = rule
-	}
-
-	config := &betterleaksconfig.Config{
-		Rules:          rules,
-		Keywords:       make(map[string]struct{}),
-		KeywordToRules: make(map[string][]string),
-		OrderedRules:   ruleIDs,
-	}
-	for ruleID, rule := range rules {
-		for _, keyword := range rule.Keywords {
-			config.Keywords[keyword] = struct{}{}
-			config.KeywordToRules[keyword] = append(config.KeywordToRules[keyword], ruleID)
-		}
-	}
-
-	detector := detect.NewDetectorContext(context.Background(), config, detect.ValidationOptions{})
-	detector.IgnoreGitleaksAllow = true
-	return detector
-}
-
-// redactTokens masks GitHub tokens detected by betterleaks while preserving
-// the prefix that identifies the token type.
+// redactTokens masks GitHub token-shaped values while preserving the prefix
+// that identifies the token type.
 func redactTokens(s string) string {
-	findings := githubTokenDetector.DetectString(s)
-
-	for _, finding := range findings {
-		secret := strings.TrimRight(finding.Secret, ".")
+	return githubTokenRE.ReplaceAllStringFunc(s, func(token string) string {
 		prefixLength := 4
-		if strings.HasPrefix(secret, "github_pat_") {
+		if strings.HasPrefix(token, "github_pat_") {
 			prefixLength = 11
 		}
-		redacted := secret[:prefixLength] + strings.Repeat("*", len(secret)-prefixLength)
-		s = strings.ReplaceAll(s, secret, redacted)
-	}
-	return s
+		return token[:prefixLength] + strings.Repeat("*", len(token)-prefixLength)
+	})
 }
 
 // abbrev abbreviates the actual work directory in the string s to the literal string "$WORK".

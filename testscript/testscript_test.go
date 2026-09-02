@@ -432,6 +432,14 @@ func TestRedactTokens(t *testing.T) {
 	// https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github#githubs-token-formats
 	// https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/
 	tokens := testGitHubTokens()
+	tokens = append(tokens,
+		"ghp_example",
+		"github_pat_example",
+		"gho_example",
+		"ghu_example",
+		"ghs_example",
+		"ghr_example",
+	)
 
 	tests := []struct {
 		name  string
@@ -503,7 +511,6 @@ func TestRedactTokens(t *testing.T) {
 		"",
 		"ordinary test output remains unchanged",
 		"token prefixes without values: ghp_ github_pat_ gho_ ghu_ ghs_ ghr_",
-		"short placeholders: ghp_example github_pat_example gho_example ghu_example ghs_example ghr_example",
 		"similar text: ghx_not-a-token",
 	} {
 		if got := redactTokens(input); got != input {
