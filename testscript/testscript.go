@@ -931,23 +931,17 @@ func (ts *TestScript) condition(cond string) (bool, error) {
 
 // Helpers for command implementations.
 
-// redactTokens looks at the entire string looking for strings that start with a known token prefix,
-// keeps the prefix that distinguishes the token type and masks the rest of the token with asterisks.
-// Note that it does not attempt to distinguish the end of a token from any suffixed characters so
-// gho_mytokenNOTATOKEN will mask the entirity of the string.
-func redactTokens(s string) string {
-	// Regular expression to match "ghp_" or "gho_" followed by any sequence of non-whitespace characters
-	re := regexp.MustCompile(`(gh[pousr]_|github_pat_)\S+`)
+var githubTokenRE = regexp.MustCompile(`(gh[pousr]_|github_pat_)[0-9A-Za-z._-]*[0-9A-Za-z_-]`)
 
-	// Replace matched strings with the prefix followed by asterisks
-	return re.ReplaceAllStringFunc(s, func(match string) string {
-		// If the match is gh then we want to keep the first 4 characters and redact everything else,
-		// otherwise, it must be a github_pat_ and then we keep the first 11 characters and redact everything else.
+// redactTokens masks GitHub token-shaped values while preserving the prefix
+// that identifies the token type.
+func redactTokens(s string) string {
+	return githubTokenRE.ReplaceAllStringFunc(s, func(token string) string {
 		prefixLength := 4
-		if strings.HasPrefix(match, "github_pat_") {
+		if strings.HasPrefix(token, "github_pat_") {
 			prefixLength = 11
 		}
-		return match[:prefixLength] + strings.Repeat("*", len(match)-prefixLength)
+		return token[:prefixLength] + strings.Repeat("*", len(token)-prefixLength)
 	})
 }
 

@@ -430,14 +430,16 @@ func TestBadDir(t *testing.T) {
 
 func TestRedactTokens(t *testing.T) {
 	// https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github#githubs-token-formats
-	tokensToRedacted := map[string]string{
-		"ghp_1234567890":        "ghp_**********",
-		"github_pat_1234567890": "github_pat_**********",
-		"gho_1234567890":        "gho_**********",
-		"ghu_1234567890":        "ghu_**********",
-		"ghs_1234567890":        "ghs_**********",
-		"ghr_1234567890":        "ghr_**********",
-	}
+	// https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/
+	tokens := testGitHubTokens()
+	tokens = append(tokens,
+		"ghp_example",
+		"github_pat_example",
+		"gho_example",
+		"ghu_example",
+		"ghs_example",
+		"ghr_example",
+	)
 
 	tests := []struct {
 		name  string
@@ -470,13 +472,29 @@ func TestRedactTokens(t *testing.T) {
 			want:  "foo%s",
 		},
 		{
-			name:  "token no word boundary (extends redaction into next word)",
-			input: "%sx",
-			want:  "%s*",
+			name:  "token surrounded by punctuation",
+			input: `(%s),`,
+			want:  `(%s),`,
+		},
+		{
+			name:  "token in URL query",
+			input: "https://example.com/?token=%s&next=ok",
+			want:  "https://example.com/?token=%s&next=ok",
+		},
+		{
+			name:  "token at sentence boundary",
+			input: "%s.",
+			want:  "%s.",
 		},
 	}
 
-	for token, redacted := range tokensToRedacted {
+	for _, token := range tokens {
+		prefixLength := 4
+		if strings.HasPrefix(token, "github_pat_") {
+			prefixLength = 11
+		}
+		redacted := token[:prefixLength] + strings.Repeat("*", len(token)-prefixLength)
+
 		for _, test := range tests {
 			t.Run(fmt.Sprintf("%s: %s", token, test.name), func(t *testing.T) {
 				unredacted := fmt.Sprintf(test.input, token)
@@ -487,6 +505,71 @@ func TestRedactTokens(t *testing.T) {
 				}
 			})
 		}
+	}
+
+	for _, input := range []string{
+		"",
+		"ordinary test output remains unchanged",
+		"token prefixes without values: ghp_ github_pat_ gho_ ghu_ ghs_ ghr_",
+		"similar text: ghx_not-a-token",
+	} {
+		if got := redactTokens(input); got != input {
+			t.Errorf("redactTokens(%q) == %q, want input unchanged", input, got)
+		}
+	}
+}
+
+func TestTestScriptLogRedactsTokens(t *testing.T) {
+	tokens := testGitHubTokens()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "redact.txt"), []byte("leak\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ft := &fakeT{verbose: true}
+	RunT(ft, Params{
+		Dir: dir,
+		Cmds: map[string]func(*TestScript, bool, []string){
+			"leak": func(ts *TestScript, _ bool, _ []string) {
+				ts.Logf("tokens: %s", strings.Join(tokens, ", "))
+			},
+		},
+	})
+
+	log := ft.log.String()
+	for _, token := range tokens {
+		if strings.Contains(log, token) {
+			t.Fatalf("testscript log exposed token %q: %q", token, log)
+		}
+	}
+}
+
+func TestRedactTokensConcurrent(t *testing.T) {
+	token := testGitHubTokens()[0]
+	want := "ghp_" + strings.Repeat("*", len(token)-4)
+
+	for range 10 {
+		t.Run("", func(t *testing.T) {
+			t.Parallel()
+			if got := redactTokens(token); got != want {
+				t.Errorf("redactTokens(%q) == %q, want %q", token, got, want)
+			}
+		})
+	}
+}
+
+func testGitHubTokens() []string {
+	body := "0123456789abcdefghijklmnopqrstuvwxyz"
+	return []string{
+		"ghp_" + body,
+		"github_pat_" + strings.Repeat("aB0_", 20) + "aB",
+		"gho_" + body,
+		"ghu_" + body,
+		"ghs_" + body,
+		"ghs_123456_eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiIxMjM0NTYifQ.signature_-123",
+		"ghs_" + strings.Repeat("A", 40) + "." + strings.Repeat("B", 40) + "." + strings.Repeat("C", 40),
+		"ghr_" + body,
 	}
 }
 
